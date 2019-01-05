@@ -1,119 +1,165 @@
 import os
 import plistlib
 import re
+import configparser
 #import enum
 import urllib.parse
 import shutil
 #from pathlib import path
-file ="/Users/Fumito/Music/iTunes/iTunes Music Library.xml"
-destination_music_folder = '/Volumes/UNTITLED/'
+import m3u_handler
+from  const import Action
+from collections import Counter
+config = configparser.ConfigParser()
+config.read('config.ini')
 
-#class m3u_controller:
-#    def __init__(self):
-#
-#    def comvert_from_m3u(self,path):
-#        
-#
-#    def Load_m3u(self,path,tracks):
-        
+file =config['DEFAULT']['itunesmusiclibraryxml']
+dap_music_folder = config['DEFAULT']['dapfolder']
+
+
 
 
 class sync_itunes:
- #   path_type = enum.Enum('Source','Destination','Common')
+ #   path_type = enum.Enum('itunes','dap','Common')
 
-    def __init__(self,itunes_music_library_xml,destination_music_folder):
+    def __init__(self,itunes_music_library_xml,dap_music_folder):
         self.target_playlist_suffix = '#'
         self.xml = plistlib.readPlist(itunes_music_library_xml)
-        self.source_music_folder = urllib.parse.unquote(self.xml['Music Folder']).replace('file://','',1)
-        self.destination_music_folder = destination_music_folder
+        self.itunes_music_folder = urllib.parse.unquote(self.xml['Music Folder']).replace('file://','',1)
+        self.dap_music_folder = dap_music_folder
         self.__load_itunes_library()
-        self.__load_destination()
+        self.__load_dap()
+        self.compare_playlists()
         self.__set_result()
     #def convert_path(self,path, convert_type):        
     def __load_itunes_library(self):
-        #get updated playkists,tracks
+        #get new playkists,tracks
 
         print('loading ituens ribrary')
-        self.updated_playlists ={}
-        self.updated_tracks =set()
+        self.new_playlists ={}
+        self.new_tracks =set()
         
         tracks = self.xml['Tracks']#dictionary
         playlists = self.xml['Playlists']#List
-        self.updated_tracks_error = set()
+        self.new_tracks_error = set()
         for playlist in playlists:
             if playlist['Name'][-1] == self.target_playlist_suffix:
-                playlist_key = playlist['Name'] + '.m3u'
-                self.updated_playlists[playlist_key] = []
+                playlist_key = os.path.join(self.dap_music_folder, (playlist['Name'] + '.m3u'))
+                self.new_playlists[playlist_key] = []
                 for  playlist_item in playlist['Playlist Items']:
                     track_id = str(playlist_item['Track ID'])
                     track = tracks[track_id]
                     if 'Location' in track.keys() :
-                        source_path = urllib.parse.unquote(track['Location']).replace('file://','',1)
-                        destination_path = source_path.replace(self.source_music_folder,self.destination_music_folder,1)
-                        common_path = source_path.replace(self.source_music_folder,'',1)
+                        itunes_path = urllib.parse.unquote(track['Location']).replace('file://','',1)
+                        dap_path = itunes_path.replace(self.itunes_music_folder,self.dap_music_folder,1)
+                        common_path = itunes_path.replace(self.itunes_music_folder,'',1)
                         #add current m3u
-                        self.updated_playlists[playlist_key].append(destination_path)
+                        self.new_playlists[playlist_key].append(dap_path)
                         # add latest tracks
-                        self.updated_tracks.add(common_path)
+                        self.new_tracks.add(common_path)
                     else :
-                        self.updated_tracks_error.add(track_id)
+                        self.new_tracks_error.add(track_id)
+                if len(self.new_playlists[playlist_key])==0:
+                    del self.new_playlists[playlist_key]
                         
  
-        print('loaded ' + str(len(self.updated_playlists)) + ' playlists and ' + str(len(self.updated_tracks)) + ' tracks')
-        print('error_tracks: ' + str(len(self.updated_tracks_error)))
-    def __load_destination(self):
-        print('loading destination folder')
+        print('loaded ' + str(len(self.new_playlists)) + ' playlists and ' + str(len(self.new_tracks)) + ' tracks')
+        print('error_tracks: ' + str(len(self.new_tracks_error)))
+    def __load_dap(self):
+        print('loading dap folder')
         #get preexist playlists, tracks
-        if not os.path.exists(self.destination_music_folder) :
-            print('not found : ' + self.destination_music_folder)
-        self.existing_playlists = {}
-        self.existing_tracks= set()
+        if not os.path.exists(self.dap_music_folder) :
+            print('not found : ' + self.dap_music_folder)
+        self.old_playlists = {}
+        self.old_tracks= set()
         
-        for root,dirs,files in os.walk(self.destination_music_folder):
+        for root,dirs,files in os.walk(self.dap_music_folder):
+            dirs[:] = [d for d in dirs if not d[0] == '.']
+
             for file in files:
                 if not file[0] == '.' :
                     path = os.path.join(root,file)
                     ext = os.path.splitext(path)[1]
                     if ext == '.m3u':
-                        self.existing_playlists[path] = load_m3u(path)#tracks
+                        self.old_playlists[path] = m3u_handler.read_m3u(path)#tracks
                     else :
-                        self.existing_tracks.add(path.replace(self.destination_music_folder, '',1))
+                        self.old_tracks.add(path.replace(self.dap_music_folder, '',1))
                                              
-        print('loaded ' + str(len(self.existing_playlists)) + ' playlists and ' + str(len(self.existing_tracks)) + ' tracks')
+        print('loaded ' + str(len(self.old_playlists)) + ' playlists and ' + str(len(self.old_tracks)) + ' tracks')
+        
+    def compare_playlists(self):
+        self.playlists = set(self.new_playlists.keys())|set(self.old_playlists.keys())
+        
+        self.playlist_action = {}
+        for playlist in self.playlists:
+            if playlist in self.old_playlists.keys():
+                if playlist in self.new_playlists.keys():
+                    if self.old_playlists[playlist] == self.new_playlists[playlist]:
+                        action = Action.SKIP
+                    else:
+                        action = Action.UPDATE
+                else :
+                    action = Action.DELETE
+            else :
+                action = Action.ADD
+            self.playlist_action[playlist] = action
     def __set_result(self):
-        self.additional_tracks = self.updated_tracks - self.existing_tracks
-        self.skip_tracks = self.updated_tracks & self.existing_tracks
-        self.delete_tracks = self.existing_tracks - self.updated_tracks
+        playlist_action_counter = Counter(self.playlist_action.values())
+        print('playlists...addtitional: ' + str(playlist_action_counter[Action.ADD]))
+        print('update: ' + str(playlist_action_counter[Action.UPDATE]))
+        print('skip: ' + str(playlist_action_counter[Action.SKIP]))
+        print('delete:' + str(playlist_action_counter[Action.DELETE]))
+        
+
+
+        
+        self.additional_tracks = self.new_tracks - self.old_tracks
+        self.skip_tracks = self.new_tracks & self.old_tracks
+        self.delete_tracks = self.old_tracks - self.new_tracks
 
         print('tracks...addtitional: ' + str(len(self.additional_tracks)) + ' ; skip: ' +str(len(self.skip_tracks)) + ' ; delete:' + str(len(self.delete_tracks)))
 
     
         
     def execute(self,whatif = False):
+        for playlist in self.playlists:
+            action = self.playlist_action[playlist]
+            if action == Action.ADD:
+                print ('ADDING:' + playlist)
+                m3u_handler.write_m3u(playlist,self.new_playlists[playlist])
+            elif action == Action.DELETE:
+                print ('DELETING:' + playlist)
+                os.remove(playlist)
+            elif action == Action.SKIP:
+                print('SKIPPING"' + playlist)
+            elif action == Action.UPDATE:
+                print ('UPDATING:' + playlist)
+                m3u_handler.write_m3u(playlist,self.new_playlists[playlist])
+
+        
         #Delete Tracks
         for track in self.delete_tracks:
             print('delete:' + track)
-            destination_path = os.path.join(self.destination_music_folder,track)
-            if not os.path.exists( destination_path):
+            dap_path = os.path.join(self.dap_music_folder,track)
+            if not os.path.exists( dap_path):
                 print('NotFound:' + track)
             else:
                 if  not whatif:
-                    os.remove(destination_path)
+                    os.remove(dap_path)
         #Update Tracks
         #SKIP Tracks
     
         # add Tracks
         for track in self.additional_tracks:
             print('Copy :' + track)
-            source_path = os.path.join(self.source_music_folder,track)
-            destination_path = os.path.join(self.destination_music_folder,track)
-            destination_folder = os.path.dirname(destination_path)
-            if not os.path.exists(source_path):
+            itunes_path = os.path.join(self.itunes_music_folder,track)
+            dap_path = os.path.join(self.dap_music_folder,track)
+            dap_folder = os.path.dirname(dap_path)
+            if not os.path.exists(itunes_path):
                 print('NotFound:' + track)
             else:
                 if not whatif:
-                    os.makedirs(destination_folder,exist_ok =True)
-                    shutil.copyfile(source_path, destination_path)
+                    os.makedirs(dap_folder,exist_ok =True)
+                    shutil.copyfile(itunes_path, dap_path)
         #Delete empty folder
         
-si = sync_itunes(file,destination_music_folder)
+si = sync_itunes(file,dap_music_folder)
