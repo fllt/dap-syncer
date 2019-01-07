@@ -55,8 +55,8 @@ class sync_itunes:
                         dap_path = itunes_path.replace(self.itunes_music_folder,self.dap_music_folder,1)
                         common_path = itunes_path.replace(self.itunes_music_folder,'',1)
                         #add current m3u
-                        #dap_path_nfc = unicodedata.normalize("NFC", dap_path)
-                        self.new_playlists[playlist_key].append(common_path)
+                        common_path_nfc = unicodedata.normalize("NFC", common_path)
+                        self.new_playlists[playlist_key].append(common_path_nfc)
                         # add latest tracks
                         self.new_tracks.add(common_path)
                     else :
