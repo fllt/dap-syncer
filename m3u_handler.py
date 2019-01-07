@@ -9,4 +9,4 @@ def read_m3u(path):
         return playlist                
 def write_m3u(path,tracks):
         with open(path,'w',encoding='utf-8' ) as file:
-                file.writelines(tracks)
+                file.write('\n'.join(tracks))

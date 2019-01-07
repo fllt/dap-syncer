@@ -7,6 +7,8 @@ import urllib.parse
 import shutil
 #from pathlib import path
 import m3u_handler
+import unicodedata
+
 from  const import Action
 from collections import Counter
 config = configparser.ConfigParser()
@@ -53,7 +55,8 @@ class sync_itunes:
                         dap_path = itunes_path.replace(self.itunes_music_folder,self.dap_music_folder,1)
                         common_path = itunes_path.replace(self.itunes_music_folder,'',1)
                         #add current m3u
-                        self.new_playlists[playlist_key].append(dap_path)
+                        #dap_path_nfc = unicodedata.normalize("NFC", dap_path)
+                        self.new_playlists[playlist_key].append(common_path)
                         # add latest tracks
                         self.new_tracks.add(common_path)
                     else :
