@@ -166,3 +166,17 @@ class sync_itunes:
         #Delete empty folder
         
 si = sync_itunes(file,dap_music_folder)
+print('Are you sure to continue sync?')
+while True:
+    dic = {'Y':True, 'N':False}
+
+    inp = input('[Y]Yes/[N]No? >> ').upper()
+    if inp in dic:
+        break
+    print('Input again.')
+if dic[inp]:
+    si.execute()
+else:
+    print('Canceled.')
+
+    

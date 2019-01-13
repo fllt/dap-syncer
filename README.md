@@ -6,6 +6,10 @@ Sync playlist and tracks in iTunes music library with Fiio X1 2nd gen
 - Execute main.py
 
 ## Plan to update
-- Bugfix(Some file repeat delete and copy by execution.)
+- Bugfix
+--Some file repeat delete and copy by execution.
+--Some playlist have not enable to sync.
 - Simplify code.
+-Select target plylist by regular expression.
+
 
