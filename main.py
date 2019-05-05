@@ -14,8 +14,12 @@ from collections import Counter
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-file =config['DEFAULT']['itunesmusiclibraryxml']
-dap_music_folder = config['DEFAULT']['dapfolder']
+# If import from itunes music library, set path of itunes music library.xml.
+# If import from rythmbox ,set path of Rythmbox library directory path .
+source_path = config['DEFAULT']['sourcepath']
+
+
+destination_path = config['DEFAULT']['destinationpath']
 
 
 
@@ -23,11 +27,11 @@ dap_music_folder = config['DEFAULT']['dapfolder']
 class sync_itunes:
  #   path_type = enum.Enum('itunes','dap','Common')
 
-    def __init__(self,itunes_music_library_xml,dap_music_folder):
+    def __init__(self,source_path,destination_path):
         self.target_playlist_suffix = '#'
         self.xml = plistlib.readPlist(itunes_music_library_xml)
         self.itunes_music_folder = urllib.parse.unquote(self.xml['Music Folder']).replace('file://','',1)
-        self.dap_music_folder = dap_music_folder
+        self.destination_path = destination_path
         self.__load_itunes_library()
         self.__load_dap()
         self.compare_playlists()
@@ -45,14 +49,14 @@ class sync_itunes:
         self.new_tracks_error = set()
         for playlist in playlists:
             if playlist['Name'][-1] == self.target_playlist_suffix:
-                playlist_key = os.path.join(self.dap_music_folder, (playlist['Name'] + '.m3u'))
+                playlist_key = os.path.join(self.destination_path, (playlist['Name'] + '.m3u'))
                 self.new_playlists[playlist_key] = []
                 for  playlist_item in playlist['Playlist Items']:
                     track_id = str(playlist_item['Track ID'])
                     track = tracks[track_id]
                     if 'Location' in track.keys() :
                         itunes_path = urllib.parse.unquote(track['Location']).replace('file://','',1)
-                        dap_path = itunes_path.replace(self.itunes_music_folder,self.dap_music_folder,1)
+                        dap_path = itunes_path.replace(self.itunes_music_folder,self.destination_path,1)
                         common_path = itunes_path.replace(self.itunes_music_folder,'',1)
                         #add current m3u
                         common_path_nfc = unicodedata.normalize("NFC", common_path)
@@ -70,12 +74,12 @@ class sync_itunes:
     def __load_dap(self):
         print('loading dap folder')
         #get preexist playlists, tracks
-        if not os.path.exists(self.dap_music_folder) :
-            print('not found : ' + self.dap_music_folder)
+        if not os.path.exists(self.destination_path) :
+            print('not found : ' + self.destination_path)
         self.old_playlists = {}
         self.old_tracks= set()
         
-        for root,dirs,files in os.walk(self.dap_music_folder):
+        for root,dirs,files in os.walk(self.destination_path):
             dirs[:] = [d for d in dirs if not d[0] == '.']
 
             for file in files:
@@ -85,7 +89,7 @@ class sync_itunes:
                     if ext == '.m3u':
                         self.old_playlists[path] = m3u_handler.read_m3u(path)#tracks
                     else :
-                        self.old_tracks.add(path.replace(self.dap_music_folder, '',1))
+                        self.old_tracks.add(path.replace(self.destination_path, '',1))
                                              
         print('loaded ' + str(len(self.old_playlists)) + ' playlists and ' + str(len(self.old_tracks)) + ' tracks')
         
@@ -142,7 +146,7 @@ class sync_itunes:
         #Delete Tracks
         for track in self.delete_tracks:
             print('delete:' + track)
-            dap_path = os.path.join(self.dap_music_folder,track)
+            dap_path = os.path.join(self.destination_path,track)
             if not os.path.exists( dap_path):
                 print('NotFound:' + track)
             else:
@@ -155,7 +159,7 @@ class sync_itunes:
         for track in self.additional_tracks:
             print('Copy :' + track)
             itunes_path = os.path.join(self.itunes_music_folder,track)
-            dap_path = os.path.join(self.dap_music_folder,track)
+            dap_path = os.path.join(self.destination_path,track)
             dap_folder = os.path.dirname(dap_path)
             if not os.path.exists(itunes_path):
                 print('NotFound:' + track)
@@ -165,7 +169,7 @@ class sync_itunes:
                     shutil.copyfile(itunes_path, dap_path)
         #Delete empty folder
         
-si = sync_itunes(file,dap_music_folder)
+si = sync_itunes(sourcePath,destination_path)
 print('Are you sure to continue sync?')
 while True:
     dic = {'Y':True, 'N':False}
